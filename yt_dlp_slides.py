@@ -388,6 +388,7 @@ class VideoGenerator:
         pip_position: str,
         preset: str = "medium",
         crf: int = 23,
+        max_duration: Optional[int] = None,
     ):
         """
         Generate the final presentation video.
@@ -400,6 +401,7 @@ class VideoGenerator:
             pip_position: Position of PiP (top-right, top-left, bottom-right, bottom-left)
             preset: FFmpeg encoding preset (ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow)
             crf: Constant Rate Factor for quality (0-51, lower is better quality, 23 is default)
+            max_duration: Maximum video duration in seconds (for debugging)
         """
         self._log("Starting video generation")
         self._log(f"Output: {output}")
@@ -437,7 +439,12 @@ class VideoGenerator:
 
         # Create PiP from speaker video
         self._log(f"Creating picture-in-picture (scale={pip_scale}, position={pip_position})")
-        speaker = ffmpeg.input(str(speaker_video))
+
+        # Load speaker video with optional duration limit
+        if max_duration is not None:
+            speaker = ffmpeg.input(str(speaker_video), t=max_duration)
+        else:
+            speaker = ffmpeg.input(str(speaker_video))
 
         # Scale the PiP
         # Calculate width, then height with aspect ratio maintained and even value
@@ -571,6 +578,12 @@ class VideoGenerator:
     type=int,
     help="Quality override (0-51, lower is better). If not set, uses preset default.",
 )
+@click.option(
+    "--max-duration",
+    default=None,
+    type=int,
+    help="Maximum video duration in seconds (for debugging). If not set, uses full video length.",
+)
 def main(
     input_dir: str,
     output: Optional[str],
@@ -579,6 +592,7 @@ def main(
     verbose: bool,
     preset: str,
     crf: Optional[int],
+    max_duration: Optional[int],
 ):
     """
     Process yt-dlp downloaded content into presentation video.
@@ -647,6 +661,18 @@ def main(
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
+    # Apply max_duration limit if specified (for debugging)
+    if max_duration is not None:
+        original_length = len(timeline)
+        # Keep only slides that start before max_duration
+        timeline = [
+            (start, min(end, max_duration), path, slide_type)
+            for start, end, path, slide_type in timeline
+            if start < max_duration
+        ]
+        if verbose:
+            click.echo(f"Applied max_duration limit: kept {len(timeline)}/{original_length} slides (up to {max_duration}s)")
+
     # Generate output filename if not provided
     if not output:
         output = str(video_path.parent / f"{video_path.stem}_slides.mp4")
@@ -689,6 +715,7 @@ def main(
             pip_position=pip_position,
             preset=preset,
             crf=crf,
+            max_duration=max_duration,
         )
     except ValidationError as e:
         click.echo(f"Error: {e}", err=True)
