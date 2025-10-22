@@ -437,9 +437,67 @@ class VideoGenerator:
                 "crf": crf,
             }
 
-            ffmpeg.output(video, audio, output, **output_args).overwrite_output().run(
-                capture_stdout=not self.verbose, capture_stderr=not self.verbose
-            )
+            # Configure FFmpeg output based on verbose mode
+            if self.verbose:
+                # Verbose mode: show all FFmpeg output
+                ffmpeg.output(video, audio, output, **output_args).overwrite_output().run()
+            else:
+                # Non-verbose mode: capture output and filter to show only progress
+                import subprocess
+                import sys
+                import os
+
+                cmd = ffmpeg.output(video, audio, output, **output_args).overwrite_output().compile()
+
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    universal_newlines=False,  # Use binary mode for better control
+                    bufsize=0  # Unbuffered for real-time output
+                )
+
+                # Read stderr in real-time and filter progress lines
+                import select
+
+                buffer = b''
+                while True:
+                    # Check if data is available (non-blocking)
+                    if os.name != 'nt':  # Unix-like systems
+                        ready = select.select([process.stderr], [], [], 0.1)
+                        if not ready[0]:
+                            if process.poll() is not None:
+                                break
+                            continue
+
+                    chunk = process.stderr.read(1024)
+                    if not chunk:
+                        break
+
+                    buffer += chunk
+
+                    # Process complete lines (ending with \r or \n)
+                    while b'\r' in buffer or b'\n' in buffer:
+                        if b'\r' in buffer:
+                            idx = buffer.index(b'\r')
+                        elif b'\n' in buffer:
+                            idx = buffer.index(b'\n')
+
+                        line = buffer[:idx].decode('utf-8', errors='ignore').strip()
+                        buffer = buffer[idx+1:]
+
+                        # FFmpeg progress lines typically start with "frame="
+                        if line.startswith('frame='):
+                            # Print progress on same line (carriage return)
+                            sys.stderr.write('\r' + line)
+                            sys.stderr.flush()
+
+                process.wait()
+                if process.returncode != 0:
+                    raise ffmpeg.Error('ffmpeg', '', '')
+
+                # Print newline after progress is done
+                sys.stderr.write('\n')
 
             self._log(f"Video generation complete: {output}")
             click.echo(f"✓ Successfully created: {output}")
@@ -560,9 +618,33 @@ def main(
     if not output:
         output = str(video_path.parent / f"{video_path.stem}_slides.mp4")
 
+    # Calculate statistics from timeline
+    total_slides = len(timeline)
+    static_slides = sum(1 for _, _, _, slide_type in timeline if slide_type == "image")
+    video_slides = sum(1 for _, _, _, slide_type in timeline if slide_type == "video")
+    total_duration = timeline[-1][1] if timeline else 0  # End time of last slide
+
+    # Display summary (always shown, not just in verbose mode)
+    click.echo("\n" + "=" * 60)
+    click.echo("Video Generation Summary")
+    click.echo("=" * 60)
+    click.echo(f"Total slides found: {total_slides}")
+    click.echo(f"  - Static slides: {static_slides}")
+    click.echo(f"  - Video slides: {video_slides}")
+
+    # Format duration as HH:MM:SS
+    hours = int(total_duration // 3600)
+    minutes = int((total_duration % 3600) // 60)
+    seconds = int(total_duration % 60)
+    duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}" if hours > 0 else f"{minutes:02d}:{seconds:02d}"
+
+    click.echo(f"Total video length: {duration_str}")
+    click.echo(f"Output file: {output}")
+    click.echo(f"Encoding preset: {preset} (CRF {crf})")
+    click.echo("=" * 60 + "\n")
+
     # Step 3: Generate video
     if verbose:
-        click.echo("\n" + "=" * 60)
         click.echo("Step 3: Generating video")
         click.echo("=" * 60)
 
