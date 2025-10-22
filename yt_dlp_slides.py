@@ -177,50 +177,83 @@ class ContentValidator:
         """
         self._log("Validating slide files")
 
+        import re
         slide_mapping = {}
+        chapters = json_data["chapters"]
         thumbnails = json_data["thumbnails"]
 
-        for thumbnail in thumbnails:
-            slide_id = thumbnail["id"]
-            url = thumbnail["url"]
+        # Create a set of thumbnail IDs for quick lookup
+        thumbnail_ids = {thumb["id"] for thumb in thumbnails}
 
-            # Extract extension from URL
-            url_path = Path(url)
-            ext = url_path.suffix.lstrip(".")
+        # Counters for reporting
+        skipped_count = 0
+        image_count = 0
+        video_count = 0
 
-            # Check for video slide first (priority)
-            video_pattern = f"*Slide {slide_id}*.mp4"
-            video_slides = list(input_dir.glob(video_pattern))
+        # Go through chapters and match with thumbnails
+        thumbnail_idx = 0
+        for chapter_idx, chapter in enumerate(chapters):
+            # Extract slide ID from chapter title (e.g., "Slide 006" -> "006")
+            title = chapter.get("title", "")
+            match = re.search(r"Slide\s+(\d+)", title)
 
-            if video_slides:
-                slide_mapping[slide_id] = (video_slides[0], "video")
-                self._log(f"Found video slide: {video_slides[0].name}")
+            if not match:
+                self._log(f"Warning: Chapter {chapter_idx} has no slide ID in title: '{title}', skipping")
+                skipped_count += 1
                 continue
 
-            # Check for image slide
-            image_path = input_dir / f"{video_name}.{slide_id}.{ext}"
-            if image_path.exists():
-                slide_mapping[slide_id] = (image_path, "image")
-                self._log(f"Found image slide: {image_path.name}")
+            slide_id = match.group(1)
+
+            # Check if this slide has a thumbnail (image)
+            if slide_id in thumbnail_ids:
+                # This slide has an image - use the thumbnail
+                # Find the thumbnail with this ID
+                thumbnail = next((t for t in thumbnails if t["id"] == slide_id), None)
+                if thumbnail:
+                    url = thumbnail["url"]
+                    url_path = Path(url)
+                    ext = url_path.suffix.lstrip(".")
+
+                    # Check for image slide
+                    image_path = input_dir / f"{video_name}.{slide_id}.{ext}"
+                    if image_path.exists():
+                        slide_mapping[slide_id] = (image_path, "image")
+                        image_count += 1
+                        self._log(f"Found image slide: {image_path.name}")
+                    else:
+                        # Try other common image extensions
+                        found = False
+                        for alt_ext in ["png", "jpg", "jpeg", "webp"]:
+                            alt_path = input_dir / f"{video_name}.{slide_id}.{alt_ext}"
+                            if alt_path.exists():
+                                slide_mapping[slide_id] = (alt_path, "image")
+                                image_count += 1
+                                self._log(f"Found image slide: {alt_path.name}")
+                                found = True
+                                break
+
+                        if not found:
+                            raise ValidationError(
+                                f"Slide file not found for thumbnail {slide_id}. "
+                                f"Expected: {video_name}.{slide_id}.{ext}"
+                            )
             else:
-                # Try other common image extensions
-                found = False
-                for alt_ext in ["png", "jpg", "jpeg", "webp"]:
-                    alt_path = input_dir / f"{video_name}.{slide_id}.{alt_ext}"
-                    if alt_path.exists():
-                        slide_mapping[slide_id] = (alt_path, "image")
-                        self._log(f"Found image slide: {alt_path.name}")
-                        found = True
-                        break
+                # This slide does NOT have a thumbnail - look for video slide
+                video_pattern = f"*Slide {slide_id}*.mp4"
+                video_slides = list(input_dir.glob(video_pattern))
 
-                if not found:
-                    raise ValidationError(
-                        f"Slide file not found for thumbnail {slide_id}. "
-                        f"Expected: {video_name}.{slide_id}.{ext}"
+                if video_slides:
+                    slide_mapping[slide_id] = (video_slides[0], "video")
+                    video_count += 1
+                    self._log(f"Found video slide: {video_slides[0].name}")
+                else:
+                    self._log(
+                        f"Warning: No slide file found for chapter {chapter_idx} (Slide {slide_id}), skipping"
                     )
+                    skipped_count += 1
 
-        self._log(f"Found {len(slide_mapping)} slide files")
-        return slide_mapping
+        self._log(f"Detailed breakdown: {image_count} images, {video_count} videos, {skipped_count} skipped")
+        return slide_mapping, image_count, video_count, skipped_count
 
     def validate_all(self, input_dir: str) -> Tuple[Path, dict, Dict[str, Tuple[Path, str]]]:
         """
@@ -254,9 +287,9 @@ class ContentValidator:
         json_data = self.validate_json_structure(json_path)
 
         # Validate slide files
-        slide_mapping = self.validate_slide_files(input_path, json_data, video_name)
+        slide_mapping, image_count, video_count, skipped_count = self.validate_slide_files(input_path, json_data, video_name)
 
-        return video_path, json_data, slide_mapping
+        return video_path, json_data, slide_mapping, image_count, video_count, skipped_count
 
 
 class SlideMapper:
@@ -597,7 +630,7 @@ def main(
         click.echo("=" * 60)
 
     try:
-        video_path, json_data, slide_mapping = validator.validate_all(input_dir)
+        video_path, json_data, slide_mapping, image_count, video_count, skipped_count = validator.validate_all(input_dir)
     except ValidationError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -620,8 +653,6 @@ def main(
 
     # Calculate statistics from timeline
     total_slides = len(timeline)
-    static_slides = sum(1 for _, _, _, slide_type in timeline if slide_type == "image")
-    video_slides = sum(1 for _, _, _, slide_type in timeline if slide_type == "video")
     total_duration = timeline[-1][1] if timeline else 0  # End time of last slide
 
     # Display summary (always shown, not just in verbose mode)
@@ -629,8 +660,9 @@ def main(
     click.echo("Video Generation Summary")
     click.echo("=" * 60)
     click.echo(f"Total slides found: {total_slides}")
-    click.echo(f"  - Static slides: {static_slides}")
-    click.echo(f"  - Video slides: {video_slides}")
+    click.echo(f"  - Static slides: {image_count}")
+    click.echo(f"  - Video slides: {video_count}")
+    click.echo(f"  - Skipped chapters: {skipped_count}")
 
     # Format duration as HH:MM:SS
     hours = int(total_duration // 3600)
