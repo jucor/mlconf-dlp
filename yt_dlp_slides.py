@@ -353,6 +353,8 @@ class VideoGenerator:
         output: str,
         pip_scale: float,
         pip_position: str,
+        preset: str = "medium",
+        crf: int = 23,
     ):
         """
         Generate the final presentation video.
@@ -363,6 +365,8 @@ class VideoGenerator:
             output: Output filename
             pip_scale: Scale factor for picture-in-picture (0-1)
             pip_position: Position of PiP (top-right, top-left, bottom-right, bottom-left)
+            preset: FFmpeg encoding preset (ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow)
+            crf: Constant Rate Factor for quality (0-51, lower is better quality, 23 is default)
         """
         self._log("Starting video generation")
         self._log(f"Output: {output}")
@@ -408,12 +412,12 @@ class VideoGenerator:
             "scale", f"iw*{pip_scale}", "-2"
         )  # -2 maintains aspect ratio with even height
 
-        # Position mapping (with 10px padding)
+        # Position mapping (no padding, directly in corners)
         positions = {
-            "top-right": {"x": "W-w-10", "y": "10"},
-            "top-left": {"x": "10", "y": "10"},
-            "bottom-right": {"x": "W-w-10", "y": "H-h-10"},
-            "bottom-left": {"x": "10", "y": "H-h-10"},
+            "top-right": {"x": "W-w", "y": "0"},
+            "top-left": {"x": "0", "y": "0"},
+            "bottom-right": {"x": "W-w", "y": "H-h"},
+            "bottom-left": {"x": "0", "y": "H-h"},
         }
 
         # Overlay PiP on slides
@@ -429,8 +433,8 @@ class VideoGenerator:
                 "vcodec": "libx264",
                 "acodec": "aac",
                 "strict": "experimental",
-                "preset": "medium",
-                "crf": 23,
+                "preset": preset,
+                "crf": crf,
             }
 
             ffmpeg.output(video, audio, output, **output_args).overwrite_output().run(
@@ -451,9 +455,9 @@ class VideoGenerator:
 @click.option("--output", "-o", help="Output video filename (default: INPUT_NAME_slides.mp4)")
 @click.option(
     "--pip-scale",
-    default=0.25,
+    default=0.1,
     type=float,
-    help="Picture-in-picture scale factor (0-1, default: 0.25)",
+    help="Picture-in-picture scale factor (0-1, default: 0.1)",
 )
 @click.option(
     "--pip-position",
@@ -464,7 +468,40 @@ class VideoGenerator:
     help="Picture-in-picture position (default: top-right)",
 )
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output for debugging")
-def main(input_dir: str, output: Optional[str], pip_scale: float, pip_position: str, verbose: bool):
+@click.option(
+    "--preset",
+    default="medium",
+    type=click.Choice(
+        [
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow",
+            "slower",
+            "veryslow",
+        ],
+        case_sensitive=False,
+    ),
+    help="FFmpeg encoding preset (default: medium). Use 'veryfast' or 'ultrafast' for faster encoding.",
+)
+@click.option(
+    "--crf",
+    default=23,
+    type=int,
+    help="Quality setting (0-51, lower is better quality, default: 23)",
+)
+def main(
+    input_dir: str,
+    output: Optional[str],
+    pip_scale: float,
+    pip_position: str,
+    verbose: bool,
+    preset: str,
+    crf: int,
+):
     """
     Process yt-dlp downloaded content into presentation video.
 
@@ -481,6 +518,11 @@ def main(input_dir: str, output: Optional[str], pip_scale: float, pip_position: 
     # Validate pip_scale
     if not 0 < pip_scale <= 1:
         click.echo("Error: --pip-scale must be between 0 and 1", err=True)
+        sys.exit(1)
+
+    # Validate crf
+    if not 0 <= crf <= 51:
+        click.echo("Error: --crf must be between 0 and 51", err=True)
         sys.exit(1)
 
     # Initialize components
@@ -529,6 +571,8 @@ def main(input_dir: str, output: Optional[str], pip_scale: float, pip_position: 
             output=output,
             pip_scale=pip_scale,
             pip_position=pip_position,
+            preset=preset,
+            crf=crf,
         )
     except ValidationError as e:
         click.echo(f"Error: {e}", err=True)
