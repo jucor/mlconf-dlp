@@ -84,14 +84,14 @@ Options:
   --pip-scale FLOAT          Picture-in-picture scale factor (0-1, default: 0.1)
   --pip-position TEXT        Position: top-right, top-left, bottom-right, bottom-left
   -v, --verbose              Enable verbose output for debugging
-  --preset TEXT              Encoding preset: ultrafast, veryfast, faster, medium (default), slow
-  --crf INTEGER              Quality setting (0-51, lower is better, default: 23)
+  --preset TEXT              Encoding preset: ultrafast (default), veryfast, medium, slow
+  --crf INTEGER              Quality override (0-51, lower is better quality)
   --help                     Show this message and exit
 ```
 
 ### Examples
 
-**Basic usage with default settings:**
+**Basic usage (fastest, lower quality - default):**
 ```bash
 python yt_dlp_slides.py data/2025/OpenWorld-Tim/
 ```
@@ -108,18 +108,19 @@ python yt_dlp_slides.py data/2025/OpenWorld-Tim/ \
     --pip-position bottom-right
 ```
 
-**Fast encoding for quick testing (5-10x faster):**
+**Medium quality encoding (balanced speed and quality):**
 ```bash
-python yt_dlp_slides.py data/2025/OpenWorld-Tim/ \
-    --preset ultrafast \
-    --crf 28
+python yt_dlp_slides.py data/2025/OpenWorld-Tim/ --preset medium
 ```
 
-**High quality encoding (slower but better quality):**
+**High quality encoding (slower but best quality):**
 ```bash
-python yt_dlp_slides.py data/2025/OpenWorld-Tim/ \
-    --preset slow \
-    --crf 18
+python yt_dlp_slides.py data/2025/OpenWorld-Tim/ --preset slow
+```
+
+**Custom quality override:**
+```bash
+python yt_dlp_slides.py data/2025/OpenWorld-Tim/ --preset veryfast --crf 20
 ```
 
 **Verbose output for debugging:**
@@ -129,30 +130,20 @@ python yt_dlp_slides.py data/2025/OpenWorld-Tim/ -v
 
 ## Speed vs Quality Guide
 
-The `--preset` option has the biggest impact on encoding speed:
+The `--preset` option controls both encoding speed and default quality:
 
-| Preset      | Speed        | File Size | Use Case                    |
-|-------------|--------------|-----------|------------------------------|
-| `ultrafast` | **Fastest**  | Largest   | Quick testing/previews       |
-| `veryfast`  | Very Fast    | Large     | Fast iteration               |
-| `faster`    | Fast         | Medium    | Balanced speed               |
-| `medium`    | **Default**  | Medium    | General use                  |
-| `slow`      | Slow         | Small     | Final output, good quality   |
-| `slower`    | Very Slow    | Smaller   | Best quality, patient users  |
+| Preset      | Default CRF | Speed        | Quality      | Use Case                     |
+|-------------|-------------|--------------|--------------|------------------------------|
+| `ultrafast` | 28          | **Fastest**  | Lower        | **Default** - Quick testing  |
+| `veryfast`  | 23          | Very Fast    | Good         | Fast iteration               |
+| `medium`    | 23          | Medium       | Good         | Balanced speed and quality   |
+| `slow`      | 18          | Slow         | Excellent    | Final output, best quality   |
 
-The `--crf` option controls quality (lower = better):
-
-| CRF Value | Quality      | File Size |
-|-----------|--------------|-----------|
-| 18        | Very High    | Large     |
-| 23        | **Default**  | Medium    |
-| 28        | Lower        | Smaller   |
-
-**Recommended combinations:**
-- **Quick test:** `--preset ultrafast --crf 28` (5-10x faster)
-- **Preview:** `--preset veryfast --crf 23` (3-5x faster, decent quality)
-- **Final output:** `--preset medium --crf 23` (default, balanced)
-- **Best quality:** `--preset slow --crf 18` (slower, best quality)
+**Notes:**
+- Each preset automatically sets an appropriate CRF (quality) value
+- Use `--crf` to override the default quality for any preset
+- Lower CRF = better quality but larger files (0-51 range)
+- `ultrafast` is the default for fastest processing
 
 ## File Validation
 

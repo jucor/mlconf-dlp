@@ -470,28 +470,15 @@ class VideoGenerator:
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output for debugging")
 @click.option(
     "--preset",
-    default="medium",
-    type=click.Choice(
-        [
-            "ultrafast",
-            "superfast",
-            "veryfast",
-            "faster",
-            "fast",
-            "medium",
-            "slow",
-            "slower",
-            "veryslow",
-        ],
-        case_sensitive=False,
-    ),
-    help="FFmpeg encoding preset (default: medium). Use 'veryfast' or 'ultrafast' for faster encoding.",
+    default="ultrafast",
+    type=click.Choice(["ultrafast", "veryfast", "medium", "slow"], case_sensitive=False),
+    help="Encoding preset (default: ultrafast). ultrafast=fast/lower quality, slow=slow/high quality.",
 )
 @click.option(
     "--crf",
-    default=23,
+    default=None,
     type=int,
-    help="Quality setting (0-51, lower is better quality, default: 23)",
+    help="Quality override (0-51, lower is better). If not set, uses preset default.",
 )
 def main(
     input_dir: str,
@@ -500,7 +487,7 @@ def main(
     pip_position: str,
     verbose: bool,
     preset: str,
-    crf: int,
+    crf: Optional[int],
 ):
     """
     Process yt-dlp downloaded content into presentation video.
@@ -520,10 +507,25 @@ def main(
         click.echo("Error: --pip-scale must be between 0 and 1", err=True)
         sys.exit(1)
 
-    # Validate crf
-    if not 0 <= crf <= 51:
-        click.echo("Error: --crf must be between 0 and 51", err=True)
-        sys.exit(1)
+    # Map preset to default CRF if not overridden
+    preset_crf_map = {
+        "ultrafast": 28,
+        "veryfast": 23,
+        "medium": 23,
+        "slow": 18,
+    }
+
+    if crf is None:
+        crf = preset_crf_map[preset]
+        if verbose:
+            click.echo(f"Using preset '{preset}' with default CRF {crf}")
+    else:
+        # Validate custom crf
+        if not 0 <= crf <= 51:
+            click.echo("Error: --crf must be between 0 and 51", err=True)
+            sys.exit(1)
+        if verbose:
+            click.echo(f"Using preset '{preset}' with custom CRF {crf}")
 
     # Initialize components
     validator = ContentValidator(verbose=verbose)
