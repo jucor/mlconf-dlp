@@ -178,6 +178,7 @@ class ContentValidator:
         self._log("Validating slide files")
 
         import re
+
         slide_mapping = {}
         chapters = json_data["chapters"]
         thumbnails = json_data["thumbnails"]
@@ -198,7 +199,9 @@ class ContentValidator:
             match = re.search(r"Slide\s+(\d+)", title)
 
             if not match:
-                self._log(f"Warning: Chapter {chapter_idx} has no slide ID in title: '{title}', skipping")
+                self._log(
+                    f"Warning: Chapter {chapter_idx} has no slide ID in title: '{title}', skipping"
+                )
                 skipped_count += 1
                 continue
 
@@ -252,7 +255,9 @@ class ContentValidator:
                     )
                     skipped_count += 1
 
-        self._log(f"Detailed breakdown: {image_count} images, {video_count} videos, {skipped_count} skipped")
+        self._log(
+            f"Detailed breakdown: {image_count} images, {video_count} videos, {skipped_count} skipped"
+        )
         return slide_mapping, image_count, video_count, skipped_count
 
     def validate_all(self, input_dir: str) -> Tuple[Path, dict, Dict[str, Tuple[Path, str]]]:
@@ -287,7 +292,9 @@ class ContentValidator:
         json_data = self.validate_json_structure(json_path)
 
         # Validate slide files
-        slide_mapping, image_count, video_count, skipped_count = self.validate_slide_files(input_path, json_data, video_name)
+        slide_mapping, image_count, video_count, skipped_count = self.validate_slide_files(
+            input_path, json_data, video_name
+        )
 
         return video_path, json_data, slide_mapping, image_count, video_count, skipped_count
 
@@ -482,28 +489,49 @@ class VideoGenerator:
                 # Verbose mode: show all FFmpeg output
                 ffmpeg.output(video, audio, output, **output_args).overwrite_output().run()
             else:
-                # Non-verbose mode: capture output and filter to show only progress
+                # Non-verbose mode: show progress bar with tqdm
                 import subprocess
                 import sys
                 import os
+                import re
+                from tqdm import tqdm
 
-                cmd = ffmpeg.output(video, audio, output, **output_args).overwrite_output().compile()
+                cmd = (
+                    ffmpeg.output(video, audio, output, **output_args).overwrite_output().compile()
+                )
+
+                # Calculate total duration from timeline
+                total_duration = timeline[-1][1] if timeline else 0
 
                 process = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    universal_newlines=False,  # Use binary mode for better control
-                    bufsize=0  # Unbuffered for real-time output
+                    universal_newlines=False,
+                    bufsize=0,
                 )
 
-                # Read stderr in real-time and filter progress lines
+                # Create progress bar
+                # Helper function to format seconds as MM:SS
+                def format_time(seconds):
+                    mins = int(seconds // 60)
+                    secs = int(seconds % 60)
+                    return f"{mins:02d}:{secs:02d}"
+
+                pbar = tqdm(
+                    total=total_duration,
+                    desc="Encoding",
+                    bar_format="{desc}: {percentage:3.0f}%|{bar}| {postfix} [{elapsed}<{remaining}]",
+                )
+
+                # Read stderr in real-time and update progress bar
                 import select
 
-                buffer = b''
+                buffer = b""
+                last_time = 0
                 while True:
                     # Check if data is available (non-blocking)
-                    if os.name != 'nt':  # Unix-like systems
+                    if os.name != "nt":  # Unix-like systems
                         ready = select.select([process.stderr], [], [], 0.1)
                         if not ready[0]:
                             if process.poll() is not None:
@@ -517,27 +545,49 @@ class VideoGenerator:
                     buffer += chunk
 
                     # Process complete lines (ending with \r or \n)
-                    while b'\r' in buffer or b'\n' in buffer:
-                        if b'\r' in buffer:
-                            idx = buffer.index(b'\r')
-                        elif b'\n' in buffer:
-                            idx = buffer.index(b'\n')
+                    while b"\r" in buffer or b"\n" in buffer:
+                        if b"\r" in buffer:
+                            idx = buffer.index(b"\r")
+                        elif b"\n" in buffer:
+                            idx = buffer.index(b"\n")
 
-                        line = buffer[:idx].decode('utf-8', errors='ignore').strip()
-                        buffer = buffer[idx+1:]
+                        line = buffer[:idx].decode("utf-8", errors="ignore").strip()
+                        buffer = buffer[idx + 1 :]
 
-                        # FFmpeg progress lines typically start with "frame="
-                        if line.startswith('frame='):
-                            # Print progress on same line (carriage return)
-                            sys.stderr.write('\r' + line)
-                            sys.stderr.flush()
+                        # Extract time and speed from FFmpeg progress line
+                        if "time=" in line:
+                            # Extract time (format: HH:MM:SS.ZZ)
+                            time_match = re.search(r"time=(\d+):(\d+):(\d+\.\d+)", line)
+                            if time_match:
+                                hours = int(time_match.group(1))
+                                minutes = int(time_match.group(2))
+                                seconds = float(time_match.group(3))
+                                current_time = hours * 3600 + minutes * 60 + seconds
+
+                                # Update progress bar
+                                pbar.n = min(current_time, total_duration)
+
+                                # Format current and total time as MM:SS
+                                current_str = format_time(current_time)
+                                total_str = format_time(total_duration)
+
+                                # Extract and display speed
+                                speed_match = re.search(r"speed=\s*(\S+)", line)
+                                speed_str = ""
+                                if speed_match:
+                                    speed = speed_match.group(1)
+                                    speed_str = f", speed={speed}"
+
+                                pbar.set_postfix_str(f"{current_str}/{total_str}{speed_str}")
+
+                                pbar.refresh()
+                                last_time = current_time
+
+                pbar.close()
 
                 process.wait()
                 if process.returncode != 0:
-                    raise ffmpeg.Error('ffmpeg', '', '')
-
-                # Print newline after progress is done
-                sys.stderr.write('\n')
+                    raise ffmpeg.Error("ffmpeg", "", "")
 
             self._log(f"Video generation complete: {output}")
             click.echo(f"✓ Successfully created: {output}")
@@ -644,7 +694,9 @@ def main(
         click.echo("=" * 60)
 
     try:
-        video_path, json_data, slide_mapping, image_count, video_count, skipped_count = validator.validate_all(input_dir)
+        video_path, json_data, slide_mapping, image_count, video_count, skipped_count = (
+            validator.validate_all(input_dir)
+        )
     except ValidationError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -671,7 +723,9 @@ def main(
             if start < max_duration
         ]
         if verbose:
-            click.echo(f"Applied max_duration limit: kept {len(timeline)}/{original_length} slides (up to {max_duration}s)")
+            click.echo(
+                f"Applied max_duration limit: kept {len(timeline)}/{original_length} slides (up to {max_duration}s)"
+            )
 
     # Generate output filename if not provided
     if not output:
@@ -694,7 +748,9 @@ def main(
     hours = int(total_duration // 3600)
     minutes = int((total_duration % 3600) // 60)
     seconds = int(total_duration % 60)
-    duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}" if hours > 0 else f"{minutes:02d}:{seconds:02d}"
+    duration_str = (
+        f"{hours:02d}:{minutes:02d}:{seconds:02d}" if hours > 0 else f"{minutes:02d}:{seconds:02d}"
+    )
 
     click.echo(f"Total video length: {duration_str}")
     click.echo(f"Output file: {output}")
