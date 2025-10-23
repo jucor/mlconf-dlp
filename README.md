@@ -1,6 +1,6 @@
 # mlconf-dlp
 
-A wrapper around [yt-dlp](https://github.com/yt-dlp/yt-dlp) for downloading and merging Machine Learning conferences' slides with the speaker's video in the corner. Lazily vibe-coded with Claude."It works on my machine."
+A wrapper around [yt-dlp](https://github.com/yt-dlp/yt-dlp) for downloading and merging Machine Learning conferences' slides with the speaker's video in the corner. Lazily vibe-coded with Claude. "It works on my machine."
 
 **Note:** This could be implemented as a yt-dlp post-processor in the future as discussed in [this yt-dlp issue](https://github.com/yt-dlp/yt-dlp/issues/5818#issuecomment-1380874495), but is currently a standalone script for simplicity and flexibility.
 
