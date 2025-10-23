@@ -10,6 +10,23 @@ Ever wanted to catch-up on conference talks offline on your phone during your si
 
 Download talks from NeurIPS, ICLR, ICML, and other conferences that use SlidesLive, and watch them anywhere without wifi or 5G.
 
+## Some supported conferences
+
+This tool works with conferences that use SlidesLive for video hosting, including:
+
+- [NeurIPS](https://neurips.cc) - Neural Information Processing Systems
+- [ICML](https://icml.cc) - International Conference on Machine Learning
+- [ICLR](https://iclr.cc) - International Conference on Learning Representations
+- [AISTATS](https://aistats.org) - Artificial Intelligence and Statistics
+- [MLSys](https://mlsys.org) - Machine Learning and Systems
+- [CVPR](https://cvpr.thecvf.com) - Computer Vision and Pattern Recognition
+- [ICCV](https://iccv.thecvf.com) - International Conference on Computer Vision
+- [ECCV](https://eccv.ecva.net) - European Conference on Computer Vision
+- [IJCAI](https://www.ijcai.org) - International Joint Conference on Artificial Intelligence
+- [AAAI](https://aaai.org) - Conference on Artificial Intelligence*
+- [CHIL](https://chil.ahli.cc) - Conference on Health, Inference, and Learning
+
+
 ## Prerequisites
 
 - Python 3.8+
