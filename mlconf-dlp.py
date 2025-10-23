@@ -1065,8 +1065,9 @@ def main(
             )
 
     # Generate output filename if not provided
+    # Save to current directory (not temp directory) to avoid deletion on cleanup
     if not output:
-        output = str(video_path.parent / f"{video_path.stem}_slides.mp4")
+        output = f"{video_path.stem}_slides.mp4"
 
     # Calculate statistics from timeline
     total_slides = len(timeline)
