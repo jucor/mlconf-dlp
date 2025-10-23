@@ -10,7 +10,7 @@ This tool extends yt-dlp by automatically merging conference slides with speaker
 
 - Python 3.8+
 - FFmpeg installed on your system
-- `uv` package manager (recommended) or `pip`
+- `pip` (or any virtual environment manager like `uv`, `venv`, etc.)
 
 ## Installation
 
@@ -19,17 +19,14 @@ This tool extends yt-dlp by automatically merging conference slides with speaker
 git clone https://github.com/jucor/mlconf-dlp.git
 cd mlconf-dlp
 
-# Install dependencies using uv (recommended)
-uv pip install -r requirements.txt
-
-# OR using pip
-# pip install -r requirements.txt
+# Install dependencies
+pip install -r requirements.txt
 
 # Run the script
 ./mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133"
 ```
 
-**Note:** With `uv pip install`, the virtual environment is automatically managed. With regular `pip`, you'll need to create and activate a venv first.
+**Note:** You may want to use a virtual environment manager like `venv`, `uv`, or `virtualenv` before installing dependencies.
 
 ## How it works
 
@@ -63,11 +60,6 @@ The tool accepts either a **conference video URL** (any conference that uses Sli
 **From a local directory:**
 ```bash
 ./mlconf-dlp.py /path/to/downloaded/content/
-```
-
-Or with `uv`:
-```bash
-uv run ./mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133"
 ```
 
 ### Command-Line Options
