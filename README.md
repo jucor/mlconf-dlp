@@ -89,9 +89,11 @@ Arguments:
 
 Options:
   -o, --output TEXT          Output video filename (default: INPUT_NAME_slides.mp4)
-  --keep-temp                Keep temporary download folder (only for URLs)
+  --keep-temp-dir            Keep temporary download folder (only for URLs)
                              Note: automatically preserved on FFmpeg errors for debugging
   --temp-dir PATH            Use specific temporary directory (creates if doesn't exist, resumes if exists)
+  --keep-ffmpeg-logs         Keep FFmpeg log files (saved next to output file)
+                             Note: automatically preserved on FFmpeg errors for debugging
   --pip-scale FLOAT          Picture-in-picture scale factor (0-1, default: 0.1)
   --pip-position TEXT        Position: top-right, top-left, bottom-right, bottom-left (default: top-right)
   -v, --verbose              Enable verbose output for debugging
@@ -111,7 +113,7 @@ Options:
 
 **Download and keep the temporary folder:**
 ```bash
-./mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --keep-temp
+./mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --keep-temp-dir
 ```
 
 **Use a specific temp directory (for resuming interrupted downloads):**

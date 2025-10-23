@@ -613,6 +613,7 @@ class VideoGenerator:
         preset: str = "medium",
         crf: int = 23,
         max_duration: Optional[int] = None,
+        keep_ffmpeg_logs: bool = False,
     ):
         """
         Generate the final presentation video.
@@ -626,6 +627,7 @@ class VideoGenerator:
             preset: FFmpeg encoding preset (ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow)
             crf: Constant Rate Factor for quality (0-51, lower is better quality, 23 is default)
             max_duration: Maximum video duration in seconds (for debugging)
+            keep_ffmpeg_logs: Keep FFmpeg log files after successful completion (always kept on error)
         """
         self._log("Starting video generation")
         self._log(f"Output: {output}")
@@ -731,6 +733,12 @@ class VideoGenerator:
 
         # Output
         self._log("Running FFmpeg")
+
+        # Prepare log file paths next to the output file
+        output_path = Path(output)
+        stdout_log = f"{output}.ffmpeg.stdout"
+        stderr_log = f"{output}.ffmpeg.stderr"
+
         try:
             output_args = {
                 "vcodec": "libx264",
@@ -742,8 +750,54 @@ class VideoGenerator:
 
             # Configure FFmpeg output based on verbose mode
             if self.verbose:
-                # Verbose mode: show all FFmpeg output
-                ffmpeg.output(video, audio, output, **output_args).overwrite_output().run()
+                # Verbose mode: show all FFmpeg output and save to log files
+                import subprocess
+
+                cmd = ffmpeg.output(video, audio, output, **output_args).overwrite_output().compile()
+
+                # Open log files if temp_dir provided
+                stdout_file = open(stdout_log, 'wb') if stdout_log else None
+                stderr_file = open(stderr_log, 'wb') if stderr_log else None
+
+                try:
+                    # Run ffmpeg, showing output and saving to files
+                    process = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+
+                    # Read and display output while saving to files
+                    import select
+                    import sys
+
+                    while True:
+                        # Read stderr (ffmpeg outputs to stderr)
+                        line = process.stderr.readline()
+                        if not line and process.poll() is not None:
+                            break
+                        if line:
+                            # Write to log file
+                            if stderr_file:
+                                stderr_file.write(line)
+                                stderr_file.flush()
+                            # Display to console
+                            sys.stderr.buffer.write(line)
+                            sys.stderr.buffer.flush()
+
+                    # Read any remaining stdout
+                    stdout_data = process.stdout.read()
+                    if stdout_data and stdout_file:
+                        stdout_file.write(stdout_data)
+
+                    process.wait()
+                    if process.returncode != 0:
+                        raise ffmpeg.Error("ffmpeg", "", "")
+                finally:
+                    if stdout_file:
+                        stdout_file.close()
+                    if stderr_file:
+                        stderr_file.close()
             else:
                 # Non-verbose mode: show progress bar with tqdm
                 import subprocess
@@ -766,6 +820,11 @@ class VideoGenerator:
                     universal_newlines=False,
                     bufsize=0,
                 )
+
+                # Open log files if temp_dir provided
+                stdout_file = open(stdout_log, 'wb') if stdout_log else None
+                stderr_file = open(stderr_log, 'wb') if stderr_log else None
+                stderr_full = b""  # Collect all stderr for logging
 
                 # Create progress bar
                 # Helper function to format seconds as MM:SS
@@ -807,6 +866,7 @@ class VideoGenerator:
                         chunk = process.stderr.read(1024)
                         if chunk:
                             buffer += chunk
+                            stderr_full += chunk  # Collect for logging
                     except (BlockingIOError, IOError):
                         # No data available right now, sleep briefly to avoid busy-waiting
                         import time
@@ -858,15 +918,40 @@ class VideoGenerator:
                 pbar.close()
 
                 process.wait()
+
+                # Read stdout and write logs
+                stdout_data = process.stdout.read()
+                if stdout_file:
+                    stdout_file.write(stdout_data)
+                    stdout_file.close()
+                if stderr_file:
+                    stderr_file.write(stderr_full)
+                    stderr_file.close()
+
                 if process.returncode != 0:
                     raise ffmpeg.Error("ffmpeg", "", "")
 
             self._log(f"Video generation complete: {output}")
             click.echo(f"✓ Successfully created: {output}")
 
+            # Clean up or keep FFmpeg logs based on flags
+            if keep_ffmpeg_logs:
+                # User explicitly wants to keep logs
+                self._log(f"FFmpeg logs saved: {stdout_log} and {stderr_log}")
+            else:
+                # Delete logs after successful completion
+                if os.path.exists(stdout_log):
+                    os.remove(stdout_log)
+                if os.path.exists(stderr_log):
+                    os.remove(stderr_log)
+                if self.verbose:
+                    click.echo("FFmpeg logs cleaned up")
+
         except ffmpeg.Error as e:
             if self.verbose and e.stderr:
                 click.echo(e.stderr.decode(), err=True)
+            # On error, always keep logs for debugging
+            click.echo(f"⚠ FFmpeg logs preserved for debugging: {stdout_log} and {stderr_log}")
             raise ValidationError(f"FFmpeg error during video generation: {e}")
 
 
@@ -874,7 +959,7 @@ class VideoGenerator:
 @click.argument("input", metavar="INPUT")
 @click.option("--output", "-o", help="Output video filename (default: INPUT_NAME_slides.mp4)")
 @click.option(
-    "--keep-temp",
+    "--keep-temp-dir",
     is_flag=True,
     help="Keep temporary download folder (only for URLs). Note: automatically preserved on FFmpeg errors for debugging.",
 )
@@ -882,6 +967,11 @@ class VideoGenerator:
     "--temp-dir",
     type=click.Path(),
     help="Use specific temporary directory for downloads (creates if doesn't exist, resumes if exists)",
+)
+@click.option(
+    "--keep-ffmpeg-logs",
+    is_flag=True,
+    help="Keep FFmpeg log files (saved next to output file). Note: automatically preserved on FFmpeg errors for debugging.",
 )
 @click.option(
     "--pip-scale",
@@ -924,8 +1014,9 @@ class VideoGenerator:
 def main(
     input: str,
     output: Optional[str],
-    keep_temp: bool,
+    keep_temp_dir: bool,
     temp_dir: Optional[str],
+    keep_ffmpeg_logs: bool,
     pip_scale: float,
     pip_position: str,
     verbose: bool,
@@ -1113,6 +1204,7 @@ def main(
             preset=preset,
             crf=crf,
             max_duration=max_duration,
+            keep_ffmpeg_logs=keep_ffmpeg_logs,
         )
     except ValidationError as e:
         click.echo(f"Error: {e}", err=True)
@@ -1137,8 +1229,8 @@ def main(
 
     # Cleanup or preserve temporary directory
     if temp_dir:
-        # If user specified --temp-dir OR --keep-temp OR resumed from existing dir OR ffmpeg error, keep it
-        should_keep = keep_temp or not created_temp_dir or ffmpeg_error
+        # If user specified --temp-dir OR --keep-temp-dir OR resumed from existing dir OR ffmpeg error, keep it
+        should_keep = keep_temp_dir or not created_temp_dir or ffmpeg_error
 
         if should_keep:
             click.echo(f"\n✓ Downloaded files kept in: {temp_dir}")
