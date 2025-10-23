@@ -1,10 +1,12 @@
 # mlconf-dlp
 
-A Python wrapper around [yt-dlp](https://github.com/yt-dlp/yt-dlp) for downloading and processing ML conference videos from SlidesLive.
-
-This tool extends yt-dlp by automatically merging conference slides with speaker video, creating presentation-style videos with picture-in-picture. It handles the complete workflow: downloading videos and slide thumbnails via yt-dlp, then composing them into a polished presentation video using FFmpeg.
+A wrapper around [yt-dlp](https://github.com/yt-dlp/yt-dlp) for downloading and merging Machine Learning conferences' slides with the speaker video in the corner. Lazily vibe-coded with Claude.
 
 **Note:** This could be implemented as a yt-dlp post-processor in the future, but is currently a standalone script for simplicity and flexibility.
+
+## Why?
+
+Ever wanted to catch-up on conference talks offline on your phone during your signal-less commute (thanks London tube 🚇)? Download talks from NeurIPS, ICLR, ICML, and other conferences that use SlidesLive, and watch them anywhere without wifi or 5G.
 
 ## Prerequisites
 
@@ -58,6 +60,8 @@ The tool accepts either a **conference video URL** (any conference that uses Sli
 ```
 
 **From a local directory:**
+Note: the directory should already contain the result of running `yt-dlp --write-info-json --write-all-thumbnails YOUR_CONFERENCE_TALK_URL`, which is what `mlconf-dlp.py` calls anyway.
+
 ```bash
 ./mlconf-dlp.py /path/to/downloaded/content/
 ```
