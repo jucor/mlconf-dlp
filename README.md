@@ -23,8 +23,7 @@ This tool works with any conference that use SlidesLive for video hosting. Go to
 - [ICCV](https://iccv.thecvf.com) - International Conference on Computer Vision
 - [ECCV](https://eccv.ecva.net) - European Conference on Computer Vision
 - [IJCAI](https://www.ijcai.org) - International Joint Conference on Artificial Intelligence
-- [AAAI](https://aaai.org) - Conference on Artificial Intelligence*
-- [CHIL](https://chil.ahli.cc) - Conference on Health, Inference, and Learning
+- [CHIL](https://chil.ahli.cc) - Conference on Health, Inference, and Learning (some years, search directly on [SlidesLive](https://slideslive.com/search?type=&query=chil))
 
 
 ## Prerequisites
