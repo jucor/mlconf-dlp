@@ -1,6 +1,6 @@
-# yt-dlp-slides
+# mlconf-dlp
 
-A Python tool for creating presentation-style videos from already-downloaded yt-dlp content.
+A Python tool for downloading and processing ML conference videos from SlidesLive, creating presentation-style videos with picture-in-picture speaker video.
 
 ## Prerequisites
 
@@ -65,30 +65,30 @@ The script generates a new video with:
 
 ### Basic Usage
 
-The tool accepts either a **YouTube URL** (downloads automatically) or a **local directory**:
+The tool accepts either a **conference video URL** (any conference that uses SlidesLive, e.g., NeurIPS, ICLR, ICML - downloads automatically) or a **local directory**:
 
 **From a URL:**
 ```bash
-python yt_dlp_slides.py "https://www.youtube.com/watch?v=VIDEO_ID"
+python mlconf-dlp.py "https://slideslive.com/VIDEO_ID"
 ```
 
 **From a local directory:**
 ```bash
-python yt_dlp_slides.py /path/to/downloaded/content/
+python mlconf-dlp.py /path/to/downloaded/content/
 ```
 
 Or with `uv`:
 ```bash
-uv run python yt_dlp_slides.py "https://www.youtube.com/watch?v=VIDEO_ID"
+uv run python mlconf-dlp.py "https://slideslive.com/VIDEO_ID"
 ```
 
 ### Command-Line Options
 
 ```
-Usage: yt_dlp_slides.py [OPTIONS] INPUT
+Usage: mlconf-dlp.py [OPTIONS] INPUT
 
 Arguments:
-  INPUT                      YouTube URL or local directory with yt-dlp downloads
+  INPUT                      Conference video URL (SlidesLive-based) or local directory
 
 Options:
   -o, --output TEXT          Output video filename (default: INPUT_NAME_slides.mp4)
@@ -106,65 +106,65 @@ Options:
 
 **Download from URL and create video:**
 ```bash
-python yt_dlp_slides.py "https://www.youtube.com/watch?v=VIDEO_ID"
+python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133"
 ```
 
 **Download and keep the temporary folder:**
 ```bash
-python yt_dlp_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --keep-temp
+python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --keep-temp
 ```
 
 **Use a specific temp directory (for resuming interrupted downloads):**
 ```bash
-python yt_dlp_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --temp-dir my-download
+python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --temp-dir my-download
 ```
 
 **Resume from an existing temp directory:**
 ```bash
 # If download was interrupted, resume using the same directory
-python yt_dlp_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --temp-dir yt-dlp-slides-abc123
+python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --temp-dir mlconf-dlp-abc123
 ```
 
 **Quick test with max duration (first 60 seconds only):**
 ```bash
-python yt_dlp_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --max-duration 60
+python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --max-duration 60
 ```
 
 **Basic usage with local directory (fastest, lower quality - default):**
 ```bash
-python yt_dlp_slides.py data/2025/OpenWorld-Tim/
+python mlconf-dlp.py data/2025/OpenWorld-Tim/
 ```
 
 **Custom output filename:**
 ```bash
-python yt_dlp_slides.py data/2025/OpenWorld-Tim/ -o my_presentation.mp4
+python mlconf-dlp.py data/2025/OpenWorld-Tim/ -o my_presentation.mp4
 ```
 
 **Larger PiP in bottom-right corner:**
 ```bash
-python yt_dlp_slides.py data/2025/OpenWorld-Tim/ \
+python mlconf-dlp.py data/2025/OpenWorld-Tim/ \
     --pip-scale 0.2 \
     --pip-position bottom-right
 ```
 
 **Medium quality encoding (balanced speed and quality):**
 ```bash
-python yt_dlp_slides.py data/2025/OpenWorld-Tim/ --preset medium
+python mlconf-dlp.py data/2025/OpenWorld-Tim/ --preset medium
 ```
 
 **High quality encoding (slower but best quality):**
 ```bash
-python yt_dlp_slides.py data/2025/OpenWorld-Tim/ --preset slow
+python mlconf-dlp.py data/2025/OpenWorld-Tim/ --preset slow
 ```
 
 **Custom quality override:**
 ```bash
-python yt_dlp_slides.py data/2025/OpenWorld-Tim/ --preset veryfast --crf 20
+python mlconf-dlp.py data/2025/OpenWorld-Tim/ --preset veryfast --crf 20
 ```
 
 **Verbose output for debugging:**
 ```bash
-python yt_dlp_slides.py data/2025/OpenWorld-Tim/ -v
+python mlconf-dlp.py data/2025/OpenWorld-Tim/ -v
 ```
 
 ## Speed vs Quality Guide
