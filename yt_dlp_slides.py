@@ -165,6 +165,31 @@ class VideoDownloader:
 
         logger = ThumbnailLogger(self.verbose)
 
+        # Check if the URL is from SlidesLive (the intended platform)
+        # This tool is designed for SlidesLive videos which have chapter slides
+        try:
+            click.echo("Checking video source...")
+            with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                # Extract info without downloading to check the extractor
+                test_info = ydl.extract_info(url, download=False)
+                extractor = test_info.get('extractor_key', 'unknown')
+
+                if extractor != 'SlidesLive':
+                    click.echo(f"\n⚠️  Warning: This video is from '{extractor}', not SlidesLive.", err=True)
+                    click.echo("This tool is specifically designed for SlidesLive conference presentations.", err=True)
+                    click.echo("Videos from other platforms likely won't have chapter slides and may not work correctly.", err=True)
+
+                    # Ask user if they want to proceed anyway (default: No)
+                    if not click.confirm("\nDo you want to proceed anyway?", default=False):
+                        raise ValidationError("Download cancelled by user - video not from SlidesLive")
+
+                    click.echo("\nProceeding with download (may not work as expected)...\n")
+                else:
+                    click.echo(f"✓ Detected SlidesLive video - compatible format")
+
+        except yt_dlp.utils.DownloadError as e:
+            raise ValidationError(f"Could not access URL: {e}")
+
         # Download in two passes:
         # Pass 1: Download thumbnails only (with custom logger for progress bar)
         # Pass 2: Download videos (without logger to show native yt-dlp progress)
