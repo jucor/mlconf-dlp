@@ -57,17 +57,17 @@ The tool accepts either a **conference video URL** (any conference that uses Sli
 
 **From a URL:**
 ```bash
-python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133"
+./mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133"
 ```
 
 **From a local directory:**
 ```bash
-python mlconf-dlp.py /path/to/downloaded/content/
+./mlconf-dlp.py /path/to/downloaded/content/
 ```
 
 Or with `uv`:
 ```bash
-uv run python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133"
+uv run ./mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133"
 ```
 
 ### Command-Line Options
@@ -96,65 +96,65 @@ Options:
 
 **Download from URL and create video:**
 ```bash
-python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133"
+./mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133"
 ```
 
 **Download and keep the temporary folder:**
 ```bash
-python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --keep-temp
+./mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --keep-temp
 ```
 
 **Use a specific temp directory (for resuming interrupted downloads):**
 ```bash
-python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --temp-dir my-download
+./mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --temp-dir my-download
 ```
 
 **Resume from an existing temp directory:**
 ```bash
 # If download was interrupted, resume using the same directory
-python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --temp-dir mlconf-dlp-abc123
+./mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --temp-dir mlconf-dlp-abc123
 ```
 
 **Quick test with max duration (first 60 seconds only):**
 ```bash
-python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --max-duration 60
+./mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --max-duration 60
 ```
 
 **Basic usage with local directory (fastest, lower quality - default):**
 ```bash
-python mlconf-dlp.py /path/to/conference-talk/
+./mlconf-dlp.py /path/to/conference-talk/
 ```
 
 **Custom output filename:**
 ```bash
-python mlconf-dlp.py /path/to/conference-talk/ -o my_presentation.mp4
+./mlconf-dlp.py /path/to/conference-talk/ -o my_presentation.mp4
 ```
 
 **Larger PiP in bottom-right corner:**
 ```bash
-python mlconf-dlp.py /path/to/conference-talk/ \
+./mlconf-dlp.py /path/to/conference-talk/ \
     --pip-scale 0.2 \
     --pip-position bottom-right
 ```
 
 **Medium quality encoding (balanced speed and quality):**
 ```bash
-python mlconf-dlp.py /path/to/conference-talk/ --preset medium
+./mlconf-dlp.py /path/to/conference-talk/ --preset medium
 ```
 
 **High quality encoding (slower but best quality):**
 ```bash
-python mlconf-dlp.py /path/to/conference-talk/ --preset slow
+./mlconf-dlp.py /path/to/conference-talk/ --preset slow
 ```
 
 **Custom quality override:**
 ```bash
-python mlconf-dlp.py /path/to/conference-talk/ --preset veryfast --crf 20
+./mlconf-dlp.py /path/to/conference-talk/ --preset veryfast --crf 20
 ```
 
 **Verbose output for debugging:**
 ```bash
-python mlconf-dlp.py /path/to/conference-talk/ -v
+./mlconf-dlp.py /path/to/conference-talk/ -v
 ```
 
 ## Speed vs Quality Guide
