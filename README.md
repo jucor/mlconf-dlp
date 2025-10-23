@@ -90,6 +90,7 @@ Arguments:
 Options:
   -o, --output TEXT          Output video filename (default: INPUT_NAME_slides.mp4)
   --keep-temp                Keep temporary download folder (only for URLs)
+                             Note: automatically preserved on FFmpeg errors for debugging
   --temp-dir PATH            Use specific temporary directory (creates if doesn't exist, resumes if exists)
   --pip-scale FLOAT          Picture-in-picture scale factor (0-1, default: 0.1)
   --pip-position TEXT        Position: top-right, top-left, bottom-right, bottom-left (default: top-right)

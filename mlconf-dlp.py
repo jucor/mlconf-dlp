@@ -876,7 +876,7 @@ class VideoGenerator:
 @click.option(
     "--keep-temp",
     is_flag=True,
-    help="Keep temporary download folder (only applies when INPUT is a URL)",
+    help="Keep temporary download folder (only for URLs). Note: automatically preserved on FFmpeg errors for debugging.",
 )
 @click.option(
     "--temp-dir",
@@ -1100,6 +1100,9 @@ def main(
         click.echo("Step 3: Generating video")
         click.echo("=" * 60)
 
+    # Track if there was an ffmpeg error (to preserve temp dir for debugging)
+    ffmpeg_error = False
+
     try:
         generator.process(
             timeline=timeline,
@@ -1113,8 +1116,12 @@ def main(
         )
     except ValidationError as e:
         click.echo(f"Error: {e}", err=True)
-        # Clean up temp dir on error (only if we created it)
-        if created_temp_dir and temp_dir and os.path.exists(temp_dir):
+        # Check if this is an FFmpeg error
+        if "FFmpeg error" in str(e):
+            ffmpeg_error = True
+            click.echo(f"\n⚠ FFmpeg error detected - temporary directory preserved for debugging: {temp_dir}")
+        # Clean up temp dir on error (only if we created it and it's not an ffmpeg error)
+        if created_temp_dir and temp_dir and os.path.exists(temp_dir) and not ffmpeg_error:
             shutil.rmtree(temp_dir)
         sys.exit(1)
     except Exception as e:
@@ -1130,8 +1137,8 @@ def main(
 
     # Cleanup or preserve temporary directory
     if temp_dir:
-        # If user specified --temp-dir OR --keep-temp OR resumed from existing dir, keep it
-        should_keep = keep_temp or not created_temp_dir
+        # If user specified --temp-dir OR --keep-temp OR resumed from existing dir OR ffmpeg error, keep it
+        should_keep = keep_temp or not created_temp_dir or ffmpeg_error
 
         if should_keep:
             click.echo(f"\n✓ Downloaded files kept in: {temp_dir}")
