@@ -1,12 +1,14 @@
 # mlconf-dlp
 
-A wrapper around [yt-dlp](https://github.com/yt-dlp/yt-dlp) for downloading and merging Machine Learning conferences' slides with the speaker video in the corner. Lazily vibe-coded with Claude.
+A wrapper around [yt-dlp](https://github.com/yt-dlp/yt-dlp) for downloading and merging Machine Learning conferences' slides with the speaker's video in the corner. Lazily vibe-coded with Claude."It works on my machine."
 
-**Note:** This could be implemented as a yt-dlp post-processor in the future, but is currently a standalone script for simplicity and flexibility.
+**Note:** This could be implemented as a yt-dlp post-processor in the future as discussed in [this yt-dlp issue](https://github.com/yt-dlp/yt-dlp/issues/5818#issuecomment-1380874495), but is currently a standalone script for simplicity and flexibility.
 
 ## Why?
 
-Ever wanted to catch-up on conference talks offline on your phone during your signal-less commute (thanks London tube 🚇)? Download talks from NeurIPS, ICLR, ICML, and other conferences that use SlidesLive, and watch them anywhere without wifi or 5G.
+Ever wanted to catch-up on conference talks offline on your phone during your signal-less commute (thanks London tube 🚇)? 
+
+Download talks from NeurIPS, ICLR, ICML, and other conferences that use SlidesLive, and watch them anywhere without wifi or 5G.
 
 ## Prerequisites
 
@@ -40,11 +42,10 @@ This script wraps yt-dlp to download and then processes:
 
 The JSON file contains:
 - `chapters[].start_time` and `chapters[].end_time`: When to display each slide
-- `thumbnails[].id`: Slide identifier (e.g., "001", "002")
-- `thumbnails[].url`: URL with file extension indicating the saved thumbnail format
+- `thumbnails[].id`: Slide identifier (e.g., "001", "002") for static slides.
 
-The script generates a new video with:
-- Slides displayed as fixed images (or videos for animated slides), timed to chapter durations
+The script generates a new video with
+- Slides displayed as fixed images at the right times, or videos for animated slides 
 - Audio track from the original speaker video
 - Picture-in-picture of the speaker video in the corner (configurable size and position)
 
