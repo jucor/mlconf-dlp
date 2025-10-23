@@ -12,7 +12,7 @@ Download talks from NeurIPS, ICLR, ICML, and other conferences that use SlidesLi
 
 ## Some supported conferences
 
-This tool works with conferences that use SlidesLive for video hosting, including:
+This tool works with any conference that use SlidesLive for video hosting. Go to the conference's agenda, pick any session with video, and note the URL. Try it with:
 
 - [NeurIPS](https://neurips.cc) - Neural Information Processing Systems
 - [ICML](https://icml.cc) - International Conference on Machine Learning
@@ -53,13 +53,9 @@ pip install -r requirements.txt
 
 This script wraps yt-dlp to download and then processes:
 1. The speaker video file (e.g., `Conference Talk Title [ID].mp4`)
-2. The JSON metadata file (e.g., `Conference Talk Title [ID].info.json`)
+2. The JSON metadata file (e.g., `Conference Talk Title [ID].info.json`): contains the slides start and end times.
 3. Slide images (e.g., `Conference Talk Title [ID].001.png`, `.002.png`, etc.)
 4. Optional: Slide videos for animated slides (e.g., `Conference Talk Title - Slide 006 [ID-006].mp4`)
-
-The JSON file contains:
-- `chapters[].start_time` and `chapters[].end_time`: When to display each slide
-- `thumbnails[].id`: Slide identifier (e.g., "001", "002") for static slides.
 
 The script generates a new video with
 - Slides displayed as fixed images at the right times, or videos for animated slides 
