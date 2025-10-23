@@ -65,33 +65,72 @@ The script generates a new video with:
 
 ### Basic Usage
 
+The tool accepts either a **YouTube URL** (downloads automatically) or a **local directory**:
+
+**From a URL:**
+```bash
+python yt_dlp_slides.py "https://www.youtube.com/watch?v=VIDEO_ID"
+```
+
+**From a local directory:**
 ```bash
 python yt_dlp_slides.py /path/to/downloaded/content/
 ```
 
 Or with `uv`:
 ```bash
-uv run python yt_dlp_slides.py /path/to/downloaded/content/
+uv run python yt_dlp_slides.py "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
 ### Command-Line Options
 
 ```
-Usage: yt_dlp_slides.py [OPTIONS] INPUT_DIR
+Usage: yt_dlp_slides.py [OPTIONS] INPUT
+
+Arguments:
+  INPUT                      YouTube URL or local directory with yt-dlp downloads
 
 Options:
   -o, --output TEXT          Output video filename (default: INPUT_NAME_slides.mp4)
+  --keep-temp                Keep temporary download folder (only for URLs)
   --pip-scale FLOAT          Picture-in-picture scale factor (0-1, default: 0.1)
   --pip-position TEXT        Position: top-right, top-left, bottom-right, bottom-left
   -v, --verbose              Enable verbose output for debugging
   --preset TEXT              Encoding preset: ultrafast (default), veryfast, medium, slow
   --crf INTEGER              Quality override (0-51, lower is better quality)
+  --max-duration INTEGER     Maximum video duration in seconds (for debugging)
   --help                     Show this message and exit
 ```
 
 ### Examples
 
-**Basic usage (fastest, lower quality - default):**
+**Download from URL and create video:**
+```bash
+python yt_dlp_slides.py "https://www.youtube.com/watch?v=VIDEO_ID"
+```
+
+**Download and keep the temporary folder:**
+```bash
+python yt_dlp_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --keep-temp
+```
+
+**Use a specific temp directory (for resuming interrupted downloads):**
+```bash
+python yt_dlp_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --temp-dir my-download
+```
+
+**Resume from an existing temp directory:**
+```bash
+# If download was interrupted, resume using the same directory
+python yt_dlp_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --temp-dir yt-dlp-slides-abc123
+```
+
+**Quick test with max duration (first 60 seconds only):**
+```bash
+python yt_dlp_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --max-duration 60
+```
+
+**Basic usage with local directory (fastest, lower quality - default):**
 ```bash
 python yt_dlp_slides.py data/2025/OpenWorld-Tim/
 ```

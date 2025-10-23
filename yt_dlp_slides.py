@@ -9,17 +9,209 @@ with slides, audio, and picture-in-picture speaker video.
 import json
 import os
 import sys
+import tempfile
+import shutil
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
+from urllib.parse import urlparse
 
 import click
 import ffmpeg
+import yt_dlp
 
 
 class ValidationError(Exception):
     """Custom exception for validation errors."""
 
     pass
+
+
+class VideoDownloader:
+    """Downloads videos from URLs using yt-dlp."""
+
+    def __init__(self, verbose: bool = False):
+        self.verbose = verbose
+
+    def download_video(self, url: str, output_dir: str, high_res_speaker: bool = False) -> str:
+        """
+        Download a video and its metadata using yt-dlp.
+
+        Args:
+            url: Video URL to download
+            output_dir: Directory to save downloaded files
+            high_res_speaker: If True, download best quality video; if False, use worst video for smaller file size
+
+        Returns:
+            Path to the directory containing downloaded files
+
+        Raises:
+            ValidationError: If download fails
+        """
+        click.echo(f"Downloading video from: {url}")
+        click.echo(f"Saving to: {output_dir}")
+
+        # Custom logger to capture thumbnail download messages
+        import re
+        import logging
+        from tqdm import tqdm
+
+        class ThumbnailLogger:
+            """Custom logger to capture and display thumbnail download info with progress bar."""
+
+            def __init__(self, verbose):
+                self.verbose = verbose
+                self.pbar = None  # Progress bar for thumbnails
+                self.max_slide = None  # Highest slide number (initialized on first thumbnail)
+                self.downloading_video = False  # Track when video download starts
+
+            def _handle_thumbnail(self, msg):
+                """Handle thumbnail download messages and update progress bar."""
+                match = re.search(r"\.(\d+)\.(png|jpg|jpeg|webp)", msg)
+                if match:
+                    slide_num = int(match.group(1))
+
+                    # Initialize progress bar on first thumbnail (highest number)
+                    if self.pbar is None:
+                        self.max_slide = slide_num
+                        # Total slides from max_slide down to 1 (not 0)
+                        self.pbar = tqdm(
+                            total=slide_num,  # Count from max_slide to 1
+                            desc="Downloading slides",
+                            unit="slide",
+                            initial=0
+                        )
+
+                    # Update progress: count how many slides we've completed
+                    # yt-dlp goes from max down to 1, so completed = (max_slide - current_slide)
+                    completed = self.max_slide - slide_num
+                    self.pbar.n = completed
+                    self.pbar.set_postfix_str(f"slide {slide_num}")
+                    self.pbar.refresh()
+
+                    # Close progress bar when we reach slide 1
+                    if slide_num == 1 and self.pbar is not None:
+                        self.pbar.n = self.max_slide  # Complete it
+                        self.pbar.close()
+                        self.pbar = None
+
+                    return True
+                return False
+
+            def debug(self, msg):
+                # Capture thumbnail download messages (ALWAYS, even in non-verbose mode)
+                if "Writing thumbnail" in msg or "Writing video thumbnail" in msg or "thumbnail" in msg.lower():
+                    if self._handle_thumbnail(msg):
+                        return
+
+                # Show ALL debug messages during video download (even in non-verbose mode)
+                if self.downloading_video:
+                    click.echo(f"[debug] {msg}")
+                    return
+
+                # Only show other debug messages in verbose mode
+                if self.verbose:
+                    click.echo(f"[debug] {msg}")
+
+            def info(self, msg):
+                # Capture thumbnail download messages (ALWAYS, even in non-verbose mode)
+                # yt-dlp outputs: "[info] Writing thumbnail to: filename.123.png"
+                if "Writing thumbnail" in msg or "Writing video thumbnail" in msg:
+                    if self._handle_thumbnail(msg):
+                        return
+
+                # Detect when yt-dlp moves on from downloading slides to other activities
+                # This could be: downloading video files, extracting info, merging formats, etc.
+                # Close the thumbnail progress bar if it's still open and we see non-slide activity
+                if self.pbar is not None:
+                    # These messages indicate yt-dlp has moved on from slides
+                    non_slide_indicators = [
+                        "Downloading",
+                        "destination:",
+                        "[download]",
+                        "Merging formats",
+                        "Deleting original file",
+                        "has already been downloaded",
+                        "Extracting URL",
+                        "[ExtractAudio]",
+                        "Post-processing"
+                    ]
+                    if any(indicator in msg for indicator in non_slide_indicators):
+                        # Complete and close the progress bar
+                        self.pbar.n = self.pbar.total  # Mark as complete
+                        self.pbar.close()
+                        self.pbar = None
+                        self.downloading_video = True
+
+                # Show video download and processing messages (ALWAYS, even in non-verbose mode)
+                if self.downloading_video:
+                    click.echo(f"[info] {msg}")
+                    return
+
+                # Only show other info messages in verbose mode
+                if self.verbose:
+                    click.echo(f"[info] {msg}")
+
+            def warning(self, msg):
+                # Always show warnings during video download
+                if self.downloading_video:
+                    click.echo(f"[warning] {msg}")
+                    return
+
+                if self.verbose:
+                    click.echo(f"[warning] {msg}")
+
+            def error(self, msg):
+                click.echo(f"[error] {msg}", err=True)
+
+        logger = ThumbnailLogger(self.verbose)
+
+        # Download in two passes:
+        # Pass 1: Download thumbnails only (with custom logger for progress bar)
+        # Pass 2: Download videos (without logger to show native yt-dlp progress)
+
+        try:
+            # Pass 1: Thumbnails with progress bar
+            click.echo("Downloading slides...")
+            ydl_opts_thumbnails = {
+                "skip_download": True,  # Don't download videos in this pass
+                "writeinfojson": True,  # --write-info-json: save metadata
+                "write_all_thumbnails": True,  # --write-all-thumbnails: save ALL thumbnails
+                "outtmpl": os.path.join(output_dir, "%(title)s [%(id)s].%(ext)s"),
+                "logger": logger,  # Use custom logger for thumbnail progress
+            }
+
+            with yt_dlp.YoutubeDL(ydl_opts_thumbnails) as ydl:
+                info = ydl.extract_info(url, download=True)
+
+            # Pass 2: Download videos with native yt-dlp progress (no custom logger)
+            click.echo("\nDownloading video files...")
+
+            # Determine format based on high_res_speaker flag
+            if high_res_speaker:
+                # High resolution: best audio + best video
+                video_format = "bestaudio+bestvideo"
+                click.echo("Using high-resolution speaker video (bestaudio+bestvideo)")
+            else:
+                # Low resolution for PiP: best audio + worst video, fallback to best video for slides
+                video_format = "bestaudio+worstvideo/bestvideo"
+                click.echo("Using low-resolution speaker video (bestaudio+worstvideo/bestvideo)")
+
+            ydl_opts_videos = {
+                "concurrent_fragment_downloads": 5,  # -N 5: parallel downloads
+                "format": video_format,
+                "outtmpl": os.path.join(output_dir, "%(title)s [%(id)s].%(ext)s"),
+                # No logger - let yt-dlp show its native progress bars
+            }
+
+            with yt_dlp.YoutubeDL(ydl_opts_videos) as ydl:
+                ydl.download([url])
+
+                if info:
+                    click.echo(f"✓ Download complete: {info.get('title', 'Video')}")
+                    return output_dir
+
+        except Exception as e:
+            raise ValidationError(f"Download failed: {e}")
 
 
 class ContentValidator:
@@ -453,13 +645,9 @@ class VideoGenerator:
         else:
             speaker = ffmpeg.input(str(speaker_video))
 
-        # Scale the PiP
-        # Calculate width, then height with aspect ratio maintained and even value
-        pip = speaker.video.filter(
-            "scale", f"iw*{pip_scale}", "-2"
-        )  # -2 maintains aspect ratio with even height
-
         # Position mapping (no padding, directly in corners)
+        # W and H in overlay refer to the main video (slides) dimensions
+        # w and h refer to the overlay video (PiP) dimensions
         positions = {
             "top-right": {"x": "W-w", "y": "0"},
             "top-left": {"x": "0", "y": "0"},
@@ -467,7 +655,50 @@ class VideoGenerator:
             "bottom-left": {"x": "0", "y": "H-h"},
         }
 
-        # Overlay PiP on slides
+        # Scale PiP relative to the main video (slides) dimensions
+        # Since scale2ref is deprecated and has issues, let's use a different approach
+        # We'll probe the first slide to get its dimensions, then scale accordingly
+
+        # Get dimensions of the first slide
+        import subprocess
+        import json as json_module
+
+        # Get the first slide path from timeline
+        first_slide_path = str(timeline[0][2])
+
+        # Probe the slide to get dimensions
+        probe_cmd = [
+            'ffprobe',
+            '-v', 'error',
+            '-select_streams', 'v:0',
+            '-show_entries', 'stream=width,height',
+            '-of', 'json',
+            first_slide_path
+        ]
+
+        try:
+            probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, check=True)
+            probe_data = json_module.loads(probe_result.stdout)
+            slide_width = probe_data['streams'][0]['width']
+            slide_height = probe_data['streams'][0]['height']
+
+            # Calculate target PiP width
+            target_pip_width = int(slide_width * pip_scale)
+
+            self._log(f"Slide dimensions: {slide_width}x{slide_height}")
+            self._log(f"Target PiP width: {target_pip_width} (scale={pip_scale})")
+
+            # Scale the PiP to the calculated width, maintaining aspect ratio
+            pip = speaker.video.filter("scale", target_pip_width, -2)  # -2 maintains aspect ratio with even height
+
+        except (subprocess.CalledProcessError, json_module.JSONDecodeError, KeyError) as e:
+            self._log(f"Warning: Could not probe slide dimensions: {e}")
+            self._log(f"Falling back to default scaling")
+            # Fallback: assume 1920x1080 and scale accordingly
+            target_pip_width = int(1920 * pip_scale)
+            pip = speaker.video.filter("scale", target_pip_width, -2)
+
+        # Overlay the scaled PiP on the slides
         video = ffmpeg.overlay(slides[0], pip, **positions[pip_position])
 
         # Use audio from speaker video
@@ -525,24 +756,36 @@ class VideoGenerator:
                 )
 
                 # Read stderr in real-time and update progress bar
-                import select
-
                 buffer = b""
                 last_time = 0
-                while True:
-                    # Check if data is available (non-blocking)
-                    if os.name != "nt":  # Unix-like systems
-                        ready = select.select([process.stderr], [], [], 0.1)
-                        if not ready[0]:
-                            if process.poll() is not None:
-                                break
-                            continue
 
-                    chunk = process.stderr.read(1024)
-                    if not chunk:
+                # Make stderr non-blocking on Unix systems
+                if os.name != "nt":
+                    import fcntl
+                    flags = fcntl.fcntl(process.stderr, fcntl.F_GETFL)
+                    fcntl.fcntl(process.stderr, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+                while True:
+                    # Check if process has ended
+                    if process.poll() is not None:
+                        # Process finished - read any remaining data
+                        try:
+                            remaining = process.stderr.read()
+                            if remaining:
+                                buffer += remaining
+                        except:
+                            pass
                         break
 
-                    buffer += chunk
+                    # Try to read data (non-blocking on Unix)
+                    try:
+                        chunk = process.stderr.read(1024)
+                        if chunk:
+                            buffer += chunk
+                    except (BlockingIOError, IOError):
+                        # No data available right now, sleep briefly to avoid busy-waiting
+                        import time
+                        time.sleep(0.01)
 
                     # Process complete lines (ending with \r or \n)
                     while b"\r" in buffer or b"\n" in buffer:
@@ -583,6 +826,10 @@ class VideoGenerator:
                                 pbar.refresh()
                                 last_time = current_time
 
+                # Ensure progress bar reaches 100% before closing
+                pbar.n = total_duration
+                pbar.set_postfix_str(f"{format_time(total_duration)}/{format_time(total_duration)}, done")
+                pbar.refresh()
                 pbar.close()
 
                 process.wait()
@@ -599,8 +846,18 @@ class VideoGenerator:
 
 
 @click.command()
-@click.argument("input_dir", type=click.Path(exists=True, file_okay=False, dir_okay=True))
+@click.argument("input", metavar="INPUT")
 @click.option("--output", "-o", help="Output video filename (default: INPUT_NAME_slides.mp4)")
+@click.option(
+    "--keep-temp",
+    is_flag=True,
+    help="Keep temporary download folder (only applies when INPUT is a URL)",
+)
+@click.option(
+    "--temp-dir",
+    type=click.Path(),
+    help="Use specific temporary directory for downloads (creates if doesn't exist, resumes if exists)",
+)
 @click.option(
     "--pip-scale",
     default=0.1,
@@ -634,28 +891,83 @@ class VideoGenerator:
     type=int,
     help="Maximum video duration in seconds (for debugging). If not set, uses full video length.",
 )
+@click.option(
+    "--high-res-speaker",
+    is_flag=True,
+    help="Download high-resolution speaker video (useful for larger picture-in-picture). Default uses low-res for smaller file size.",
+)
 def main(
-    input_dir: str,
+    input: str,
     output: Optional[str],
+    keep_temp: bool,
+    temp_dir: Optional[str],
     pip_scale: float,
     pip_position: str,
     verbose: bool,
     preset: str,
     crf: Optional[int],
     max_duration: Optional[int],
+    high_res_speaker: bool,
 ):
     """
-    Process yt-dlp downloaded content into presentation video.
+    Process yt-dlp content into presentation video.
 
-    This tool creates a presentation-style video from already-downloaded yt-dlp content,
-    combining slides with speaker audio and picture-in-picture video.
+    This tool can download from a URL or process already-downloaded content,
+    creating a presentation-style video with slides, speaker audio, and picture-in-picture video.
 
-    INPUT_DIR should contain:
+    INPUT can be:
+    - A YouTube/video URL: Will download with yt-dlp to a temporary folder
+    - A local directory: Should contain yt-dlp downloaded files
+
+    Downloaded/existing content should include:
     - Main speaker video: [title] [id].mp4
     - Metadata: [title] [id].info.json
     - Slide images: [title] [id].[slide_id].[ext]
     - Optional slide videos: [title] - Slide [slide_id] [id-slide_id].mp4
     """
+
+    # Check if input is a URL or directory
+    parsed = urlparse(input)
+    is_url = bool(parsed.scheme and parsed.netloc)
+
+    created_temp_dir = False
+    input_dir = input
+
+    if is_url:
+        # Download from URL to temporary directory
+        if temp_dir:
+            # Use specified temp directory (create if doesn't exist, resume if exists)
+            if not os.path.exists(temp_dir):
+                os.makedirs(temp_dir)
+                created_temp_dir = True
+                if verbose:
+                    click.echo(f"Created temporary directory: {temp_dir}")
+            else:
+                if verbose:
+                    click.echo(f"Resuming download in existing directory: {temp_dir}")
+        else:
+            # Create new temp directory with random name
+            temp_dir = tempfile.mkdtemp(prefix="yt-dlp-slides-", dir=".")
+            created_temp_dir = True
+
+        downloader = VideoDownloader(verbose=verbose)
+
+        try:
+            input_dir = downloader.download_video(input, temp_dir, high_res_speaker=high_res_speaker)
+        except ValidationError as e:
+            # Clean up temp dir on download failure (only if we created it)
+            if created_temp_dir and temp_dir and os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(1)
+    else:
+        # Validate that directory exists
+        if not os.path.exists(input):
+            click.echo(f"Error: Directory does not exist: {input}", err=True)
+            sys.exit(1)
+        if not os.path.isdir(input):
+            click.echo(f"Error: Input path is not a directory: {input}", err=True)
+            sys.exit(1)
 
     # Validate pip_scale
     if not 0 < pip_scale <= 1:
@@ -775,6 +1087,9 @@ def main(
         )
     except ValidationError as e:
         click.echo(f"Error: {e}", err=True)
+        # Clean up temp dir on error (only if we created it)
+        if created_temp_dir and temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
         sys.exit(1)
     except Exception as e:
         click.echo(f"Unexpected error: {e}", err=True)
@@ -782,7 +1097,23 @@ def main(
             import traceback
 
             traceback.print_exc()
+        # Clean up temp dir on error (only if we created it)
+        if created_temp_dir and temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
         sys.exit(1)
+
+    # Cleanup or preserve temporary directory
+    if temp_dir:
+        # If user specified --temp-dir OR --keep-temp OR resumed from existing dir, keep it
+        should_keep = keep_temp or not created_temp_dir
+
+        if should_keep:
+            click.echo(f"\n✓ Downloaded files kept in: {temp_dir}")
+        else:
+            # Only auto-cleanup if we created a new random temp dir and user didn't ask to keep
+            shutil.rmtree(temp_dir)
+            if verbose:
+                click.echo(f"\nCleaned up temporary directory: {temp_dir}")
 
 
 if __name__ == "__main__":
