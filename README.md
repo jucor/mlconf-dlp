@@ -1,6 +1,10 @@
 # mlconf-dlp
 
-A Python tool for downloading and processing ML conference videos from SlidesLive, creating presentation-style videos with picture-in-picture speaker video.
+A Python wrapper around [yt-dlp](https://github.com/yt-dlp/yt-dlp) for downloading and processing ML conference videos from SlidesLive.
+
+This tool extends yt-dlp by automatically merging conference slides with speaker video, creating presentation-style videos with picture-in-picture. It handles the complete workflow: downloading videos and slide thumbnails via yt-dlp, then composing them into a polished presentation video using FFmpeg.
+
+**Note:** This could be implemented as a yt-dlp post-processor in the future, but is currently a standalone script for simplicity and flexibility.
 
 ## Prerequisites
 
@@ -8,48 +12,32 @@ A Python tool for downloading and processing ML conference videos from SlidesLiv
 - FFmpeg installed on your system
 - `uv` package manager (recommended) or `pip`
 
-This tool processes videos and slides that have been previously downloaded using yt-dlp with the following command:
-```bash
-yt-dlp --write-info-json --write-all-thumbnails [VIDEO_URL]
-```
-
 ## Installation
 
-### Using uv (recommended)
-
 ```bash
-# Create virtual environment
-uv venv
+# Clone the repository
+git clone https://github.com/jucor/mlconf-dlp.git
+cd mlconf-dlp
 
-# Activate virtual environment
-source .venv/bin/activate
-
-# Install dependencies
+# Install dependencies using uv (recommended)
 uv pip install -r requirements.txt
+
+# OR using pip
+# pip install -r requirements.txt
+
+# Run the script
+./mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133"
 ```
 
-### Using pip
-
-```bash
-# Create virtual environment
-python -m venv .venv
-
-# Activate virtual environment
-source .venv/bin/activate  # On macOS/Linux
-# or
-.venv\Scripts\activate     # On Windows
-
-# Install dependencies
-pip install -r requirements.txt
-```
+**Note:** With `uv pip install`, the virtual environment is automatically managed. With regular `pip`, you'll need to create and activate a venv first.
 
 ## How it works
 
-This script processes a directory containing:
-1. The speaker video file (e.g., `Open-Endedness, World Models, and the Automation of Innovation [39038746].mp4`)
-2. The JSON metadata file (e.g., `Open-Endedness, World Models, and the Automation of Innovation [39038746].info.json`)
-3. Slide images (e.g., `Open-Endedness, World Models, and the Automation of Innovation [39038746].001.png`)
-4. Optional: Slide videos for animated slides (e.g., `Open-Endedness, World Models, and the Automation of Innovation - Slide 006 [39038746-006].mp4`)
+This script wraps yt-dlp to download and then processes:
+1. The speaker video file (e.g., `Conference Talk Title [ID].mp4`)
+2. The JSON metadata file (e.g., `Conference Talk Title [ID].info.json`)
+3. Slide images (e.g., `Conference Talk Title [ID].001.png`, `.002.png`, etc.)
+4. Optional: Slide videos for animated slides (e.g., `Conference Talk Title - Slide 006 [ID-006].mp4`)
 
 The JSON file contains:
 - `chapters[].start_time` and `chapters[].end_time`: When to display each slide
@@ -69,7 +57,7 @@ The tool accepts either a **conference video URL** (any conference that uses Sli
 
 **From a URL:**
 ```bash
-python mlconf-dlp.py "https://slideslive.com/VIDEO_ID"
+python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133"
 ```
 
 **From a local directory:**
@@ -79,7 +67,7 @@ python mlconf-dlp.py /path/to/downloaded/content/
 
 Or with `uv`:
 ```bash
-uv run python mlconf-dlp.py "https://slideslive.com/VIDEO_ID"
+uv run python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133"
 ```
 
 ### Command-Line Options
@@ -93,12 +81,14 @@ Arguments:
 Options:
   -o, --output TEXT          Output video filename (default: INPUT_NAME_slides.mp4)
   --keep-temp                Keep temporary download folder (only for URLs)
+  --temp-dir PATH            Use specific temporary directory (creates if doesn't exist, resumes if exists)
   --pip-scale FLOAT          Picture-in-picture scale factor (0-1, default: 0.1)
-  --pip-position TEXT        Position: top-right, top-left, bottom-right, bottom-left
+  --pip-position TEXT        Position: top-right, top-left, bottom-right, bottom-left (default: top-right)
   -v, --verbose              Enable verbose output for debugging
   --preset TEXT              Encoding preset: ultrafast (default), veryfast, medium, slow
   --crf INTEGER              Quality override (0-51, lower is better quality)
   --max-duration INTEGER     Maximum video duration in seconds (for debugging)
+  --high-res-speaker         Download high-resolution speaker video (useful for larger PiP)
   --help                     Show this message and exit
 ```
 
@@ -132,39 +122,39 @@ python mlconf-dlp.py "https://neurips.cc/virtual/2024/invited-talk/101133" --max
 
 **Basic usage with local directory (fastest, lower quality - default):**
 ```bash
-python mlconf-dlp.py data/2025/OpenWorld-Tim/
+python mlconf-dlp.py /path/to/conference-talk/
 ```
 
 **Custom output filename:**
 ```bash
-python mlconf-dlp.py data/2025/OpenWorld-Tim/ -o my_presentation.mp4
+python mlconf-dlp.py /path/to/conference-talk/ -o my_presentation.mp4
 ```
 
 **Larger PiP in bottom-right corner:**
 ```bash
-python mlconf-dlp.py data/2025/OpenWorld-Tim/ \
+python mlconf-dlp.py /path/to/conference-talk/ \
     --pip-scale 0.2 \
     --pip-position bottom-right
 ```
 
 **Medium quality encoding (balanced speed and quality):**
 ```bash
-python mlconf-dlp.py data/2025/OpenWorld-Tim/ --preset medium
+python mlconf-dlp.py /path/to/conference-talk/ --preset medium
 ```
 
 **High quality encoding (slower but best quality):**
 ```bash
-python mlconf-dlp.py data/2025/OpenWorld-Tim/ --preset slow
+python mlconf-dlp.py /path/to/conference-talk/ --preset slow
 ```
 
 **Custom quality override:**
 ```bash
-python mlconf-dlp.py data/2025/OpenWorld-Tim/ --preset veryfast --crf 20
+python mlconf-dlp.py /path/to/conference-talk/ --preset veryfast --crf 20
 ```
 
 **Verbose output for debugging:**
 ```bash
-python mlconf-dlp.py data/2025/OpenWorld-Tim/ -v
+python mlconf-dlp.py /path/to/conference-talk/ -v
 ```
 
 ## Speed vs Quality Guide
