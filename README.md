@@ -101,7 +101,8 @@ Options:
   --crf INTEGER              Quality override (0-51, lower is better quality)
   --max-duration INTEGER     Maximum video duration in seconds (for debugging)
   --high-res-speaker         Download high-resolution speaker video (useful for larger PiP)
-  --no-hw-accel              Disable hardware acceleration and use software encoding (libx264)
+  --hw-accel                 Enable hardware acceleration (h264_videotoolbox on macOS, h264_nvenc on NVIDIA)
+                             Default uses software encoding (libx264)
   --help                     Show this message and exit
 ```
 

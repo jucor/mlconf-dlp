@@ -595,9 +595,9 @@ class SlideMapper:
 class VideoGenerator:
     """Generates the final video using FFmpeg."""
 
-    def __init__(self, verbose: bool = False, no_hw_accel: bool = False):
+    def __init__(self, verbose: bool = False, hw_accel: bool = False):
         self.verbose = verbose
-        self.no_hw_accel = no_hw_accel
+        self.hw_accel = hw_accel
         self._available_encoders = None  # Cache for encoder detection
 
     def _log(self, message: str):
@@ -620,15 +620,15 @@ class VideoGenerator:
         if self._available_encoders is not None:
             return self._available_encoders
 
-        # If hardware acceleration is disabled, use libx264
-        if self.no_hw_accel:
+        # If hardware acceleration is not enabled, use libx264
+        if not self.hw_accel:
             self._available_encoders = 'libx264'
-            self._log("Hardware acceleration disabled, using libx264")
+            self._log("Using software encoding (libx264). Use --hw-accel to enable hardware acceleration.")
             return self._available_encoders
 
         import subprocess
 
-        # Check for available encoders
+        # Check for available encoders (hardware acceleration requested)
         encoders_to_check = ['h264_videotoolbox', 'h264_nvenc', 'libx264']
 
         try:
@@ -1141,9 +1141,9 @@ class VideoGenerator:
     help="Download high-resolution speaker video (useful for larger picture-in-picture). Default uses low-res for smaller file size.",
 )
 @click.option(
-    "--no-hw-accel",
+    "--hw-accel",
     is_flag=True,
-    help="Disable hardware acceleration and use software encoding (libx264).",
+    help="Enable hardware acceleration (h264_videotoolbox on macOS, h264_nvenc on NVIDIA GPUs). Default uses software encoding (libx264).",
 )
 def main(
     input: str,
@@ -1158,7 +1158,7 @@ def main(
     crf: Optional[int],
     max_duration: Optional[int],
     high_res_speaker: bool,
-    no_hw_accel: bool,
+    hw_accel: bool,
 ):
     """
     Process yt-dlp content into presentation video.
@@ -1248,7 +1248,7 @@ def main(
     # Initialize components
     validator = ContentValidator(verbose=verbose)
     mapper = SlideMapper(verbose=verbose)
-    generator = VideoGenerator(verbose=verbose, no_hw_accel=no_hw_accel)
+    generator = VideoGenerator(verbose=verbose, hw_accel=hw_accel)
 
     # Step 1: Validate all files present
     if verbose:
