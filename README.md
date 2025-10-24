@@ -101,6 +101,7 @@ Options:
   --crf INTEGER              Quality override (0-51, lower is better quality)
   --max-duration INTEGER     Maximum video duration in seconds (for debugging)
   --high-res-speaker         Download high-resolution speaker video (useful for larger PiP)
+  --no-hw-accel              Disable hardware acceleration and use software encoding (libx264)
   --help                     Show this message and exit
 ```
 

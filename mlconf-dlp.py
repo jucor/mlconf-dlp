@@ -595,13 +595,67 @@ class SlideMapper:
 class VideoGenerator:
     """Generates the final video using FFmpeg."""
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool = False, no_hw_accel: bool = False):
         self.verbose = verbose
+        self.no_hw_accel = no_hw_accel
+        self._available_encoders = None  # Cache for encoder detection
 
     def _log(self, message: str):
         """Log message if verbose mode is enabled."""
         if self.verbose:
             click.echo(f"[Generator] {message}")
+
+    def _detect_available_encoders(self):
+        """
+        Detect available hardware-accelerated H.264 encoders.
+
+        Checks for encoders in priority order:
+        1. h264_videotoolbox (macOS hardware encoding)
+        2. h264_nvenc (NVIDIA hardware encoding)
+        3. libx264 (software encoding, always available)
+
+        Returns:
+            str: Best available encoder name
+        """
+        if self._available_encoders is not None:
+            return self._available_encoders
+
+        # If hardware acceleration is disabled, use libx264
+        if self.no_hw_accel:
+            self._available_encoders = 'libx264'
+            self._log("Hardware acceleration disabled, using libx264")
+            return self._available_encoders
+
+        import subprocess
+
+        # Check for available encoders
+        encoders_to_check = ['h264_videotoolbox', 'h264_nvenc', 'libx264']
+
+        try:
+            # Run ffmpeg -encoders and capture output
+            result = subprocess.run(
+                ['ffmpeg', '-hide_banner', '-encoders'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            output = result.stdout
+
+            # Check each encoder in priority order
+            for encoder in encoders_to_check:
+                if encoder in output:
+                    self._available_encoders = encoder
+                    self._log(f"Selected video encoder: {encoder}")
+                    return encoder
+
+        except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError) as e:
+            self._log(f"Warning: Could not detect encoders: {e}")
+
+        # Fallback to libx264 (should always be available)
+        self._available_encoders = 'libx264'
+        self._log("Fallback to libx264 encoder")
+        return self._available_encoders
 
     def process(
         self,
@@ -739,65 +793,140 @@ class VideoGenerator:
         stdout_log = f"{output}.ffmpeg.stdout"
         stderr_log = f"{output}.ffmpeg.stderr"
 
+        # Detect best available encoder
+        video_encoder = self._detect_available_encoders()
+
+        # Show encoder info to user (even in non-verbose mode)
+        if video_encoder in ['h264_videotoolbox', 'h264_nvenc']:
+            click.echo(f"Using hardware-accelerated encoder: {video_encoder}")
+
         try:
+            # Build output args based on selected encoder
             output_args = {
-                "vcodec": "libx264",
+                "vcodec": video_encoder,
                 "acodec": "aac",
                 "strict": "experimental",
-                "preset": preset,
-                "crf": crf,
             }
+
+            # Hardware encoders have different parameter names and requirements
+            if video_encoder == 'h264_videotoolbox':
+                # VideoToolbox uses 'b:v' (bitrate) instead of 'crf'
+                # Quality scale: lower bitrate = lower quality
+                # Map CRF to bitrate (approximate):
+                # CRF 18 (high) -> 5M, CRF 23 (default) -> 2.5M, CRF 28 (low) -> 1M
+                bitrate_map = {
+                    18: '5M',
+                    23: '2.5M',
+                    28: '1M',
+                }
+                output_args['b:v'] = bitrate_map.get(crf, '2.5M')
+                self._log(f"Using VideoToolbox with bitrate: {output_args['b:v']}")
+            elif video_encoder == 'h264_nvenc':
+                # NVENC supports CRF and preset
+                output_args['crf'] = crf
+                # NVENC preset mapping: ultrafast->fast, veryfast->medium, medium->slow, slow->slow
+                nvenc_preset_map = {
+                    'ultrafast': 'fast',
+                    'veryfast': 'medium',
+                    'medium': 'slow',
+                    'slow': 'slow',
+                }
+                output_args['preset'] = nvenc_preset_map.get(preset, 'medium')
+                self._log(f"Using NVENC with CRF {crf} and preset {output_args['preset']}")
+            else:  # libx264
+                # Standard x264 parameters
+                output_args['crf'] = crf
+                output_args['preset'] = preset
+                self._log(f"Using libx264 with CRF {crf} and preset {preset}")
 
             # Configure FFmpeg output based on verbose mode
             if self.verbose:
-                # Verbose mode: show all FFmpeg output and save to log files
+                # Verbose mode: show all FFmpeg output in real-time and save to log files
                 import subprocess
+                import sys
+                import os
 
                 cmd = ffmpeg.output(video, audio, output, **output_args).overwrite_output().compile()
 
-                # Open log files if temp_dir provided
-                stdout_file = open(stdout_log, 'wb') if stdout_log else None
-                stderr_file = open(stderr_log, 'wb') if stderr_log else None
+                # Open log files
+                stdout_file = open(stdout_log, 'wb')
+                stderr_file = open(stderr_log, 'wb')
 
                 try:
-                    # Run ffmpeg, showing output and saving to files
+                    # Run ffmpeg with unbuffered output
                     process = subprocess.Popen(
                         cmd,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
+                        bufsize=0,  # Unbuffered
                     )
 
-                    # Read and display output while saving to files
-                    import select
-                    import sys
+                    # Make pipes non-blocking on Unix systems for real-time output
+                    if os.name != "nt":
+                        import fcntl
+                        for pipe in [process.stdout, process.stderr]:
+                            flags = fcntl.fcntl(pipe, fcntl.F_GETFL)
+                            fcntl.fcntl(pipe, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+                    # Collect all output while displaying in real-time
+                    stdout_full = b""
+                    stderr_full = b""
 
                     while True:
-                        # Read stderr (ffmpeg outputs to stderr)
-                        line = process.stderr.readline()
-                        if not line and process.poll() is not None:
+                        # Check if process has ended
+                        if process.poll() is not None:
+                            # Read any remaining data
+                            try:
+                                remaining_stdout = process.stdout.read()
+                                if remaining_stdout:
+                                    stdout_full += remaining_stdout
+                                    sys.stdout.buffer.write(remaining_stdout)
+                                    sys.stdout.buffer.flush()
+                            except:
+                                pass
+                            try:
+                                remaining_stderr = process.stderr.read()
+                                if remaining_stderr:
+                                    stderr_full += remaining_stderr
+                                    sys.stderr.buffer.write(remaining_stderr)
+                                    sys.stderr.buffer.flush()
+                            except:
+                                pass
                             break
-                        if line:
-                            # Write to log file
-                            if stderr_file:
-                                stderr_file.write(line)
-                                stderr_file.flush()
-                            # Display to console
-                            sys.stderr.buffer.write(line)
-                            sys.stderr.buffer.flush()
 
-                    # Read any remaining stdout
-                    stdout_data = process.stdout.read()
-                    if stdout_data and stdout_file:
-                        stdout_file.write(stdout_data)
+                        # Try to read from both stdout and stderr
+                        try:
+                            chunk = process.stdout.read(1024)
+                            if chunk:
+                                stdout_full += chunk
+                                sys.stdout.buffer.write(chunk)
+                                sys.stdout.buffer.flush()
+                        except (BlockingIOError, IOError):
+                            pass
+
+                        try:
+                            chunk = process.stderr.read(1024)
+                            if chunk:
+                                stderr_full += chunk
+                                sys.stderr.buffer.write(chunk)
+                                sys.stderr.buffer.flush()
+                        except (BlockingIOError, IOError):
+                            pass
+
+                        # Small sleep to avoid busy-waiting
+                        import time
+                        time.sleep(0.01)
+
+                    # Write collected output to log files
+                    stdout_file.write(stdout_full)
+                    stderr_file.write(stderr_full)
 
                     process.wait()
                     if process.returncode != 0:
                         raise ffmpeg.Error("ffmpeg", "", "")
                 finally:
-                    if stdout_file:
-                        stdout_file.close()
-                    if stderr_file:
-                        stderr_file.close()
+                    stdout_file.close()
+                    stderr_file.close()
             else:
                 # Non-verbose mode: show progress bar with tqdm
                 import subprocess
@@ -1011,6 +1140,11 @@ class VideoGenerator:
     is_flag=True,
     help="Download high-resolution speaker video (useful for larger picture-in-picture). Default uses low-res for smaller file size.",
 )
+@click.option(
+    "--no-hw-accel",
+    is_flag=True,
+    help="Disable hardware acceleration and use software encoding (libx264).",
+)
 def main(
     input: str,
     output: Optional[str],
@@ -1024,6 +1158,7 @@ def main(
     crf: Optional[int],
     max_duration: Optional[int],
     high_res_speaker: bool,
+    no_hw_accel: bool,
 ):
     """
     Process yt-dlp content into presentation video.
@@ -1113,7 +1248,7 @@ def main(
     # Initialize components
     validator = ContentValidator(verbose=verbose)
     mapper = SlideMapper(verbose=verbose)
-    generator = VideoGenerator(verbose=verbose)
+    generator = VideoGenerator(verbose=verbose, no_hw_accel=no_hw_accel)
 
     # Step 1: Validate all files present
     if verbose:
